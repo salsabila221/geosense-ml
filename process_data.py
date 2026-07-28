@@ -22,7 +22,7 @@ KONDISI_TANAH = (
 )
 
 # --- KONFIGURASI HARDWARE & ML ---
-SERIAL_PORT = "COM7"  # Port USB Arduino
+SERIAL_PORT = "COM3"  # Port USB Arduino
 BAUD_RATE = 230400  # Sesuai Serial.begin(230400)
 SAMPLING_RATE = 90  # 90 SPS dari ADS1220
 WINDOW_SIZE = 256  # 256 poin data per window untuk ML
