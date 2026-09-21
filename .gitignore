@@ -1,0 +1,23 @@
+# Python Bytecode & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+tempCodeRunnerFile.py
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Editor & OS
+.vscode/
+.idea/
+.DS_Store
+
+# Output Grafik & Gambar Laporan
+*.png
+*.jpg
+*.log
+
+# Raw Data (Uncomment jika dataset mentah pecahan cukup di laptop lokal)
+# dataset_raw/
