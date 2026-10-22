@@ -1,22 +1,26 @@
 import glob
 import os
+from pathlib import Path
+
 import pandas as pd
 
-base_path = "dataset_raw"
+BASE_DIR = Path(__file__).resolve().parent
+base_path = BASE_DIR / "dataset_raw"
+output_path = BASE_DIR / "data" / "dataset_geophone_gabungan.csv"
 all_data = []
 
-if not os.path.exists(base_path):
+if not base_path.exists():
     print(f"❌ Folder '{base_path}' tidak ditemukan!")
-    exit()
+    raise SystemExit(1)
 
 print("🔍 Memulai proses penggabungan dataset...\n")
 
 # Iterasi ke setiap subfolder (tanah_basah, tanah_kering)
 for kondisi in os.listdir(base_path):
-    folder_path = os.path.join(base_path, kondisi)
+    folder_path = base_path / kondisi
 
-    if os.path.isdir(folder_path):
-        csv_files = glob.glob(os.path.join(folder_path, "*.csv"))
+    if folder_path.is_dir():
+        csv_files = glob.glob(str(folder_path / "*.csv"))
 
         for file in csv_files:
             # 1. Cek ukuran file dulu, jika 0 KB langsung lewati
@@ -55,12 +59,11 @@ for kondisi in os.listdir(base_path):
 # Gabungkan seluruh DataFrame jika ada data valid
 if all_data:
     gabungan_df = pd.concat(all_data, ignore_index=True)
-    gabungan_df.to_csv("dataset_geophone_gabungan.csv", index=False)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    gabungan_df.to_csv(output_path, index=False)
 
     print("\n" + "=" * 55)
-    print(
-        "🎉 BERHASIL! Semua data valid digabung ke 'dataset_geophone_gabungan.csv'"
-    )
+    print(f"🎉 BERHASIL! Semua data valid digabung ke '{output_path}'")
     print(f"📊 Total Data Terkumpul: {len(gabungan_df)} baris")
     print("=" * 55)
 else:

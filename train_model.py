@@ -1,18 +1,29 @@
+from pathlib import Path
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import classification_report, accuracy_score, confusion_matrix
 import joblib
 
-# 1. BACA DATASET GABUNGAN
-DATASET_FILE = "dataset_geophone_gabungan.csv"
+BASE_DIR = Path(__file__).resolve().parent
+
+# 1. BACA DATASET GABUNGAN (utamakan folder data/, fallback ke root lama)
+DATASET_CANDIDATES = [
+    BASE_DIR / "data" / "dataset_geophone_gabungan.csv",
+    BASE_DIR / "dataset_geophone_gabungan.csv",
+]
+DATASET_FILE = next(
+    (path for path in DATASET_CANDIDATES if path.exists()),
+    DATASET_CANDIDATES[0],
+)
 print(f"📂 Memuat data dari '{DATASET_FILE}'...")
 
 try:
     df = pd.read_csv(DATASET_FILE)
 except FileNotFoundError:
     print(f"❌ File '{DATASET_FILE}' belum ada! Jalankan 'python gabungan_csv.py' dulu.")
-    exit()
+    raise SystemExit(1)
 
 # 2. PISAHKAN FITUR (X) DAN LABEL (y)
 # Ambil kolom data sinyal col_0 sampai col_255
@@ -57,6 +68,8 @@ print("\nDetail Laporan Klasifikasi:")
 print(classification_report(y_test, y_pred))
 
 # 6. SIMPAN MODEL KEDALAM FILE .PKL
-MODEL_FILE = "geosense_model.pkl"
+MODEL_DIR = BASE_DIR / "models"
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+MODEL_FILE = MODEL_DIR / "geosense_model.pkl"
 joblib.dump(model, MODEL_FILE)
 print(f"💾 Model berhasil disimpan sebagai '{MODEL_FILE}'")

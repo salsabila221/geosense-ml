@@ -4,3 +4,4 @@ scikit-learn
 joblib
 paho-mqtt
 matplotlib
+scipy
