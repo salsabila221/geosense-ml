@@ -5,3 +5,5 @@ joblib
 paho-mqtt
 matplotlib
 scipy
+pyserial
+python-dotenv

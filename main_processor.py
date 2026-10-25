@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from collections import deque
 from pathlib import Path
 import time
@@ -20,6 +21,13 @@ from scipy.signal import correlate
 warnings.filterwarnings("ignore")
 
 BASE_DIR = Path(__file__).resolve().parent
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv(BASE_DIR / ".env")
+except Exception:
+    pass
 
 # --- INPUT KONDISI TANAH ---
 print("=" * 68)
@@ -71,12 +79,13 @@ EVENT_ACTIVITIES = {"jalan", "kendaraan", "longsor"}
 
 # --- KONFIGURASI MQTT ---
 MQTT_BROKER = os.getenv(
-    "MQTT_BROKER", "3cd0f777a8ec4a20af722dd1214f7eb3.s1.eu.hivemq.cloud"
+    "MQTT_BROKER", "35f0ff8245ed4c5c8d3838dc3bd1ba62.s1.eu.hivemq.cloud"
 )
 MQTT_PORT = int(os.getenv("MQTT_PORT", "8883"))
-MQTT_USER = os.getenv("MQTT_USERNAME", "Kelom2")
-MQTT_PASS = os.getenv("MQTT_PASSWORD", "TCPRule1")
-MQTT_TOPIC_RAW = os.getenv("MQTT_TOPIC_RAW", "geosense/raw/#")
+MQTT_USER = os.getenv("MQTT_USERNAME", "geosense-process")
+MQTT_PASS = os.getenv("MQTT_PASSWORD", "")
+MQTT_TOPIC_RAW = os.getenv("MQTT_TOPIC_RAW", "geosense/raw/#,rawdata")
+MQTT_TOPICS_RAW = [topic.strip() for topic in MQTT_TOPIC_RAW.split(",") if topic.strip()]
 MQTT_TOPIC_DATA = os.getenv("MQTT_TOPIC_DATA", "geosense/data")
 DEFAULT_SENSOR_ID = os.getenv("DEFAULT_SENSOR_ID", "geo_1").strip().lower()
 
@@ -105,11 +114,19 @@ for _index, _node in enumerate(NODE_IDS, start=1):
 
 
 def resolve_sensor_id(value):
-    """Ubah 'geo-2', 'GEOFON 2', 'node_2', atau '2' menjadi 'geo_2'."""
+    """Ubah 'geo-2', 'GEOFON 2', 'node_2', 'NODE02', atau '2' menjadi 'geo_2'."""
     if value is None:
         return None
     key = str(value).strip().lower().replace("-", "_").replace(" ", "_")
-    return SENSOR_ALIASES.get(key)
+    direct = SENSOR_ALIASES.get(key)
+    if direct:
+        return direct
+
+    # Firmware mengirim nama seperti "NODE01"/"node02" (dengan nol di depan).
+    match = re.search(r"(\d+)$", key)
+    if match:
+        return SENSOR_ALIASES.get(str(int(match.group(1))))
+    return None
 
 
 def _to_mv(value, unit=None):
@@ -134,12 +151,40 @@ def _flatten_numbers(value):
         return []
 
 
+def is_event_payload(data_json):
+    """True kalau payload adalah event waveform protokol baru."""
+    if not isinstance(data_json, dict):
+        return False
+    marker = str(data_json.get("type") or data_json.get("kind") or "").strip().lower()
+    event_id = (
+        data_json.get("event_id")
+        or data_json.get("event")
+        or data_json.get("eid")
+        or data_json.get("id_event")
+    )
+    if event_id is None:
+        return False
+    if marker in {
+        "event",
+        "event_meta",
+        "event_data",
+        "event_end",
+        "waveform",
+        "data",
+        "meta",
+        "end",
+    }:
+        return True
+    return any(isinstance(data_json.get(key), (list, tuple)) for key in ("samples", "waveform"))
+
+
 def parse_mqtt_payload(payload_str, topic):
     """
     Kembalikan (sensor_id, readings_mv).
 
     Format yang didukung:
-    - Topik  : geosense/raw/geo_1
+    - Topik  : geosense/raw/geo_1 atau rawdata
+    - JSON  : {"n": "NODE01", "p": 27, "t": 50843, "d": [0.00012, ...]}
     - JSON  : {"sensor_id": "geo_1", "d": [0.012, 0.013, ...]}
     - JSON  : {"voltage": 0.012} / {"val": 0.012} / {"mv": 12.3}
     - Angka : "0.012" (dianggap Volt)
@@ -157,7 +202,8 @@ def parse_mqtt_payload(payload_str, topic):
     readings = []
 
     if isinstance(data_json, dict):
-        for key in ("sensor_id", "node_id", "geophone", "node"):
+        # "n" adalah kunci singkat firmware: {"n": "NODE01", "d": [...]}.
+        for key in ("sensor_id", "node_id", "geophone", "node", "n"):
             sensor_id = resolve_sensor_id(data_json.get(key))
             if sensor_id:
                 break
@@ -277,8 +323,10 @@ def on_mqtt_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
         mqtt_connected = True
         print("MQTT terhubung ke HiveMQ Cloud")
-        mqtt_client.subscribe(MQTT_TOPIC_RAW)
-        print(f"Subscribed ke '{MQTT_TOPIC_RAW}'\n")
+        for topic in MQTT_TOPICS_RAW:
+            mqtt_client.subscribe(topic)
+            print(f"Subscribed ke '{topic}'")
+        print()
     else:
         print(f"MQTT gagal terhubung, RC: {rc}")
 
@@ -287,6 +335,23 @@ def on_mqtt_message(client, userdata, msg):
     """Terima data dari ESP32 Geo 1, Geo 2, atau Geo 3."""
     try:
         payload_str = msg.payload.decode("utf-8").strip()
+
+        # Protokol baru mengirim EVENT_META/DATA/EVENT_END berisi waveform
+        # ADC counts. Jangan dimasukkan ke buffer kontinu (bisa merusak ML);
+        # mode event di processing belum diaktifkan.
+        try:
+            data_json = json.loads(payload_str)
+        except (TypeError, ValueError):
+            data_json = None
+        if is_event_payload(data_json):
+            print(
+                f"Event waveform terdeteksi di '{msg.topic}' "
+                f"(node {data_json.get('n') or data_json.get('node')}, "
+                f"event {data_json.get('event_id') or data_json.get('event')}). "
+                "Mode event processing belum diaktifkan."
+            )
+            return
+
         sensor_id, readings = parse_mqtt_payload(payload_str, msg.topic)
 
         if not sensor_id:

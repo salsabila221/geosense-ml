@@ -21,3 +21,11 @@ env/
 
 # Raw Data (Uncomment jika dataset mentah pecahan cukup di laptop lokal)
 # dataset_raw/
+
+# Konfigurasi lokal (password MQTT)
+.env
+
+# Output receiver
+lora_events.jsonl
+lora_frames.jsonl
+binary_capture.jsonl
