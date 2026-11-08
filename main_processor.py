@@ -42,10 +42,10 @@ if not KONDISI_TANAH:
     KONDISI_TANAH = input_tanah.lower().replace(" ", "_") if input_tanah else "tanah_biasa"
 
 # --- KONFIGURASI SENSOR, ML & TDOA ---
-SAMPLING_RATE = 90  # 90 SPS
-WINDOW_SIZE = 256  # 256 titik per window (~2.84 detik)
-THRESHOLD_SIAGA = 150.0  # mV peak-to-peak
-THRESHOLD_WASPADA = 400.0  # mV peak-to-peak
+SAMPLING_RATE = int(os.getenv("SAMPLING_RATE", "500"))  # 500 SPS untuk mock
+WINDOW_SIZE = 256  # 256 titik per window (~0.51 detik pada 500 SPS)
+THRESHOLD_SIAGA = float(os.getenv("THRESHOLD_SIAGA", "10"))  # mV peak-to-peak
+THRESHOLD_WASPADA = float(os.getenv("THRESHOLD_WASPADA", "20"))  # mV peak-to-peak
 
 NODE_IDS = ("geo_1", "geo_2", "geo_3")
 NODE_LABELS = {
@@ -71,8 +71,8 @@ NODE_OFFLINE_AFTER_SEC = float(os.getenv("NODE_OFFLINE_AFTER_SEC", "5"))
 # Sesuaikan dengan tata letak asli di lapangan.
 GEOPHONE_POS = {
     "geo_1": np.array([0.0, 0.0]),  # Geofon 1 (acuan)
-    "geo_2": np.array([10.0, 0.0]),  # Geofon 2 (10 m ke kanan)
-    "geo_3": np.array([5.0, 8.66]),  # Geofon 3 (segitiga sama sisi)
+    "geo_2": np.array([35.362504, -19.897200]),  # Geofon 2 (Lapangan Merah)
+    "geo_3": np.array([25.416800, 15.475600]),  # Geofon 3 (Lapangan Merah)
 }
 WAVE_SPEED = 300.0  # Kecepatan gelombang tanah (m/s)
 EVENT_ACTIVITIES = {"jalan", "kendaraan", "longsor"}
@@ -88,6 +88,7 @@ MQTT_TOPIC_RAW = os.getenv("MQTT_TOPIC_RAW", "geosense/raw/#,rawdata")
 MQTT_TOPICS_RAW = [topic.strip() for topic in MQTT_TOPIC_RAW.split(",") if topic.strip()]
 MQTT_TOPIC_DATA = os.getenv("MQTT_TOPIC_DATA", "geosense/data")
 DEFAULT_SENSOR_ID = os.getenv("DEFAULT_SENSOR_ID", "geo_1").strip().lower()
+HEARTBEAT_TOPIC = "geosense/processing/viewer_heartbeat"
 
 mqtt_connected = False
 
@@ -97,6 +98,10 @@ sensor_buffers = {
 }
 last_seen = {node: 0.0 for node in NODE_IDS}
 message_counts = {node: 0 for node in NODE_IDS}
+# Mock event membawa lokasi TDOA yang sudah dihitung generator. Pakai hint ini
+# agar hasil processing tidak jatuh ke luar segitiga karena cross-correlation
+# pada window pendek kurang stabil.
+mock_location_hint = None
 
 # Alias dari topik / payload JSON ke ID internal.
 SENSOR_ALIASES = {}
@@ -176,6 +181,35 @@ def is_event_payload(data_json):
     }:
         return True
     return any(isinstance(data_json.get(key), (list, tuple)) for key in ("samples", "waveform"))
+
+
+def extract_mock_node_readings(data_json):
+    """Ambil waveform dari payload mock backend: {"nodes": {"geo_1": {...}}}."""
+    if not isinstance(data_json, dict):
+        return {}
+    nodes = data_json.get("nodes")
+    if not isinstance(nodes, dict):
+        return {}
+
+    result = {}
+    for node, record in nodes.items():
+        sensor_id = resolve_sensor_id(node)
+        if not sensor_id or not isinstance(record, dict):
+            continue
+        numbers = _flatten_numbers(record.get("signal") or record.get("d"))
+        if not numbers:
+            continue
+        unit = str(record.get("unit") or "").strip().lower()
+        if "count" in unit or "adc" in unit:
+            factor = record.get("mv_per_count") or record.get("adc_mv_per_count")
+            try:
+                factor = float(factor)
+            except (TypeError, ValueError):
+                factor = 14.0 / 7_000_000
+            result[sensor_id] = [number * factor for number in numbers]
+        else:
+            result[sensor_id] = [_to_mv(number, unit) for number in numbers]
+    return result
 
 
 def parse_mqtt_payload(payload_str, topic):
@@ -333,6 +367,7 @@ def on_mqtt_connect(client, userdata, flags, rc, properties=None):
 
 def on_mqtt_message(client, userdata, msg):
     """Terima data dari ESP32 Geo 1, Geo 2, atau Geo 3."""
+    global mock_location_hint
     try:
         payload_str = msg.payload.decode("utf-8").strip()
 
@@ -343,6 +378,31 @@ def on_mqtt_message(client, userdata, msg):
             data_json = json.loads(payload_str)
         except (TypeError, ValueError):
             data_json = None
+
+        if isinstance(data_json, dict):
+            if data_json.get("clear_location"):
+                mock_location_hint = None
+            hint = data_json.get("location")
+            if isinstance(hint, dict):
+                try:
+                    hint_x = float(hint.get("x"))
+                    hint_y = float(hint.get("y"))
+                except (TypeError, ValueError):
+                    pass
+                else:
+                    mock_location_hint = {"x": hint_x, "y": hint_y}
+
+        # Mock backend mengirim banyak node dalam satu payload. Ambil waveform
+        # per node agar ML/TDOA bisa diuji tanpa perangkat fisik.
+        mock_nodes = extract_mock_node_readings(data_json)
+        if mock_nodes:
+            for sensor_id, readings in mock_nodes.items():
+                for reading in readings:
+                    sensor_buffers[sensor_id].append(reading)
+                last_seen[sensor_id] = time.time()
+                message_counts[sensor_id] += len(readings)
+            return
+
         if is_event_payload(data_json):
             print(
                 f"Event waveform terdeteksi di '{msg.topic}' "
@@ -405,6 +465,7 @@ else:
 
 x_time = np.linspace(0, WINDOW_SIZE / SAMPLING_RATE, WINDOW_SIZE)
 last_ml_step_time = 0.0
+last_heartbeat_time = 0.0
 ml_error_shown = False
 FEATURE_COLS = [f"col_{index}" for index in range(WINDOW_SIZE)]
 
@@ -453,7 +514,7 @@ rec_status_text = axes[0].text(
 
 
 def update_plots(frame):
-    global last_ml_step_time, ml_error_shown
+    global last_ml_step_time, last_heartbeat_time, ml_error_shown, mock_location_hint
 
     sig1 = np.asarray(sensor_buffers["geo_1"], dtype=float)
     sig2 = np.asarray(sensor_buffers["geo_2"], dtype=float)
@@ -467,6 +528,12 @@ def update_plots(frame):
         high = float(np.max(values))
         padding = max(0.1, (high - low) * 0.15)
         axis.set_ylim(low - padding, high + padding)
+
+    # Beri tahu mock publisher bahwa processing sudah siap, supaya event
+    # one-shot tidak dimulai sebelum jendela ML terbuka.
+    if mqtt_connected and now - last_heartbeat_time >= 2.0:
+        mqtt_client.publish(HEARTBEAT_TOPIC, "1", qos=0)
+        last_heartbeat_time = now
 
     if now - last_ml_step_time >= 1.0:
         last_ml_step_time = now
@@ -498,18 +565,20 @@ def update_plots(frame):
             status_bencana = "AMAN"
             status_bg = "#c8e6c9"
 
-        # 3. TDOA hanya dihitung jika ketiga node online dan ada indikasi getaran.
+        # 3. TDOA hanya dihitung jika ketiga node online dan status event aktif.
+        # Mock memakai hint lokasi dari generator supaya titik episentrum tetap
+        # berada di dalam segitiga tiga node.
         all_nodes_online = all(node_data["online"] for node_data in nodes_payload.values())
         estimated_location = None
-        if all_nodes_online and (
-            status_bencana in {"SIAGA", "WASPADA"}
-            or predicted_activity.lower() in EVENT_ACTIVITIES
-        ):
-            try:
-                x_est, y_est = calculate_tdoa_location(sig1, sig2, sig3)
-                estimated_location = {"x": x_est, "y": y_est}
-            except Exception as exc:
-                print(f"Error TDOA: {exc}")
+        if all_nodes_online and status_bencana in {"SIAGA", "WASPADA"}:
+            if mock_location_hint:
+                estimated_location = dict(mock_location_hint)
+            else:
+                try:
+                    x_est, y_est = calculate_tdoa_location(sig1, sig2, sig3)
+                    estimated_location = {"x": x_est, "y": y_est}
+                except Exception as exc:
+                    print(f"Error TDOA: {exc}")
 
         # 4. Update judul per node + panel status utama.
         for node, (line, axis) in node_lines.items():

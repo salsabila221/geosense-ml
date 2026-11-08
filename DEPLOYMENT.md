@@ -34,6 +34,10 @@ Node STM32 --LoRa biner--> EBYTE radio (USB-UART di Jetson)
 
 Contoh jalan manual:
 
+> Konfigurasi radio terpusat di `lora/config.env` (port, baud, ACK, log).
+> Contoh di bawah adalah override manual; tanpa argumen, receiver membaca
+> `lora/config.env`.
+
 ```bash
 cd /opt/geosense/geosense-processing
 python3 lora_receiver.py --port /dev/ttyUSB0 --baud 9600
@@ -118,7 +122,8 @@ After=network-online.target
 User=YOUR_USER
 WorkingDirectory=/opt/geosense/geosense-processing
 EnvironmentFile=/opt/geosense/geosense-processing/.env
-ExecStart=/usr/bin/python3 lora_receiver.py --port /dev/serial/by-id/USB-SERIAL --baud 9600
+# Port/baud/ACK dibaca dari lora/config.env oleh lora_receiver.py
+ExecStart=/opt/geosense/venv/bin/python lora_receiver.py
 Restart=always
 RestartSec=5
 

@@ -25,6 +25,9 @@ env/
 # Konfigurasi lokal (password MQTT)
 .env
 
+# Konfigurasi radio lokal (port per perangkat)
+lora/config.env
+
 # Output receiver
 lora_events.jsonl
 lora_frames.jsonl

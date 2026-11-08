@@ -103,6 +103,10 @@ EBYTE + USB-UART (atau tambahkan mode bridge di firmware ESP32).
 
 ## Menjalankan
 
+> Konfigurasi radio terpusat di `lora/config.env`. Tanpa argumen,
+> `lora_receiver.py` membaca port/baud/ACK/log dari file tersebut. Contoh di
+> bawah adalah override manual.
+
 ```powershell
 # Radio EBYTE langsung ke laptop
 python lora_receiver.py --port COM5 --baud 9600
@@ -168,3 +172,9 @@ Folder `GeoSense Node_V2` memakai **protokol biner yang sama** dengan V1
    ```
 
    Gunakan `--no-ack` karena ACK sudah dikirim ESP32.
+
+## Mode uji event JSON (ESP dummy)
+
+`lora_receiver.py` juga menerima event JSON dari ESP dummy. Format dan contoh
+payload ada di `LORA_JSON_TEST.md`. Fitur JSON 7 nilai bukan input model 256
+sampel dan akan diabaikan dengan peringatan.

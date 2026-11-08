@@ -1,0 +1,1 @@
+"""GeoSense LoRa configuration package."""

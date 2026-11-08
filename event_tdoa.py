@@ -462,9 +462,49 @@ class TdoaEngine:
             indices, np.arange(len(event.samples)), event.samples
         )
 
+    def _gps_positions(self) -> dict[str, np.ndarray] | None:
+        """Derive local x/y from GPS when all three nodes have a fix.
+
+        ``GEOPHONE_POS_JSON`` is still the fallback. GPS positions are used by
+        default so TDOA is not computed with a 10 m demo triangle on a real
+        site that is hundreds of metres wide. Set
+        ``TDOA_USE_GPS_POSITIONS=0`` to force the configured positions.
+        """
+        use_gps = os.getenv("TDOA_USE_GPS_POSITIONS", "1").strip().lower()
+        if use_gps in {"0", "false", "no", "off"}:
+            return None
+        if any(node not in self.gps for node in NODES):
+            return None
+
+        origin = self.gps["geo_1"]
+        lat0 = float(origin["latitude"])
+        lon0 = float(origin["longitude"])
+        cos_lat = max(0.01, math.cos(math.radians(lat0)))
+        positions = {}
+        for node in NODES:
+            gps = self.gps[node]
+            east = (float(gps["longitude"]) - lon0) * 111_320.0 * cos_lat
+            north = (float(gps["latitude"]) - lat0) * 111_320.0
+            positions[node] = np.array([east, north], dtype=float)
+
+        span = max(
+            float(np.linalg.norm(positions[a] - positions[b]))
+            for index, a in enumerate(NODES)
+            for b in NODES[index + 1:]
+        )
+        return positions if span >= 1.0 else None
+
     def _compute(self, group: dict[str, NodeEvent]) -> dict | None:
         if any(node not in group for node in NODES):
             return None
+        positions = self._gps_positions() or self.cfg.positions
+        max_distance = max(
+            float(np.linalg.norm(positions[a] - positions[b]))
+            for index, a in enumerate(NODES)
+            for b in NODES[index + 1:]
+        )
+        max_lag = max(self.cfg.max_lag_s, 2.0 * max_distance / self.cfg.wave_speed)
+        bounds = max(self.cfg.bounds_m, max_distance * 2.0)
         periods = {
             node: event.sample_period_us / 1_000_000.0
             for node, event in group.items()
@@ -499,10 +539,10 @@ class TdoaEngine:
             windows[node] = window
 
         dt12, q12 = time_delay(
-            windows["geo_1"], windows["geo_2"], self.cfg.target_fs, self.cfg.max_lag_s
+            windows["geo_1"], windows["geo_2"], self.cfg.target_fs, max_lag
         )
         dt13, q13 = time_delay(
-            windows["geo_1"], windows["geo_3"], self.cfg.target_fs, self.cfg.max_lag_s
+            windows["geo_1"], windows["geo_3"], self.cfg.target_fs, max_lag
         )
         if min(q12, q13) < self.cfg.min_quality:
             log(f"kualitas korelasi rendah: q12={q12:.3f} q13={q13:.3f}")
@@ -511,9 +551,9 @@ class TdoaEngine:
         location = estimate_location(
             dt12,
             dt13,
-            self.cfg.positions,
+            positions,
             self.cfg.wave_speed,
-            self.cfg.bounds_m,
+            bounds,
         )
         if location is None:
             return None
@@ -555,6 +595,13 @@ class TdoaEngine:
                 "sample_count": int(len(samples)),
                 "utc": event.utc.isoformat(),
             }
+            gps = self.gps.get(node)
+            if gps:
+                nodes_payload[node]["gps"] = {
+                    "latitude": gps["latitude"],
+                    "longitude": gps["longitude"],
+                    "fix": True,
+                }
 
         origin = "geo_1"
         gps = self.gps.get("geo_1")

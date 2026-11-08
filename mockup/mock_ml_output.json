@@ -1,0 +1,171 @@
+{
+  "generated_at": "2026-10-28T10:15:04",
+  "mode": "local-mockup-no-mqtt",
+  "model": {
+    "path": "C:\\geosense-processing\\models\\geosense_model.pkl",
+    "n_features": 256,
+    "classes": [
+      "diem",
+      "jalan"
+    ]
+  },
+  "normal": {
+    "label": "Getaran rendah / kondisi normal",
+    "utc": "2026-10-27T09:15:42.000Z",
+    "expected_activity": "diem",
+    "expected_status": "AMAN",
+    "status": "AMAN",
+    "max_p2p": 0.0031,
+    "nodes": {
+      "geo_1": {
+        "name": "Gedung PPBS",
+        "gps": {
+          "lat": -6.9233875,
+          "lon": 107.7731538
+        },
+        "stats": {
+          "p2p": 0.002058,
+          "rms": 0.000363,
+          "peak": 0.001247,
+          "unit": "mV"
+        },
+        "activity": "diem",
+        "confidence": 1.0,
+        "probabilities": {
+          "diem": 1.0,
+          "jalan": 0.0
+        },
+        "window_start": 0
+      },
+      "geo_2": {
+        "name": "Parking Jembatan Cincin",
+        "gps": {
+          "lat": -6.924417,
+          "lon": 107.7738624
+        },
+        "stats": {
+          "p2p": 0.002165,
+          "rms": 0.000355,
+          "peak": 0.001202,
+          "unit": "mV"
+        },
+        "activity": "diem",
+        "confidence": 0.99,
+        "probabilities": {
+          "diem": 0.99,
+          "jalan": 0.01
+        },
+        "window_start": 0
+      },
+      "geo_3": {
+        "name": "Lapangan Merah",
+        "gps": {
+          "lat": -6.92537,
+          "lon": 107.77424
+        },
+        "stats": {
+          "p2p": 0.003102,
+          "rms": 0.000437,
+          "peak": 0.001774,
+          "unit": "mV"
+        },
+        "activity": "diem",
+        "confidence": 0.99,
+        "probabilities": {
+          "diem": 0.99,
+          "jalan": 0.01
+        },
+        "window_start": 0
+      }
+    }
+  },
+  "event": {
+    "label": "Getaran di area antara Gedung PPBS dan Lapangan Merah",
+    "utc": "2026-10-27T09:15:42.000Z",
+    "expected_activity": "jalan",
+    "expected_status": "SIAGA",
+    "status": "SIAGA",
+    "max_p2p": 299.6205,
+    "nodes": {
+      "geo_1": {
+        "name": "Gedung PPBS",
+        "gps": {
+          "lat": -6.9233875,
+          "lon": 107.7731538
+        },
+        "stats": {
+          "distance_m": 116.619,
+          "delay_ms": 388.73,
+          "p2p": 296.987042,
+          "rms": 13.758447,
+          "peak": 267.100082,
+          "unit": "mV"
+        },
+        "activity": "jalan",
+        "confidence": 0.78,
+        "probabilities": {
+          "diem": 0.22,
+          "jalan": 0.78
+        },
+        "window_start": 384
+      },
+      "geo_2": {
+        "name": "Parking Jembatan Cincin",
+        "gps": {
+          "lat": -6.924417,
+          "lon": 107.7738624
+        },
+        "stats": {
+          "distance_m": 22.92,
+          "delay_ms": 76.4,
+          "p2p": 294.325351,
+          "rms": 13.721339,
+          "peak": 264.249959,
+          "unit": "mV"
+        },
+        "activity": "jalan",
+        "confidence": 0.84,
+        "probabilities": {
+          "diem": 0.16,
+          "jalan": 0.84
+        },
+        "window_start": 384
+      },
+      "geo_3": {
+        "name": "Lapangan Merah",
+        "gps": {
+          "lat": -6.92537,
+          "lon": 107.77424
+        },
+        "stats": {
+          "distance_m": 133.36,
+          "delay_ms": 444.532,
+          "p2p": 299.620503,
+          "rms": 13.937261,
+          "peak": 269.675423,
+          "unit": "mV"
+        },
+        "activity": "jalan",
+        "confidence": 0.73,
+        "probabilities": {
+          "diem": 0.27,
+          "jalan": 0.73
+        },
+        "window_start": 384
+      }
+    }
+  },
+  "event_location": {
+    "x": 59.723,
+    "y": -100.172,
+    "lat": -6.9242937,
+    "lon": 107.7736942,
+    "nearest_node": "geo_2",
+    "nearest_name": "Parking Jembatan Cincin",
+    "nearest_distance_m": 23.04,
+    "dt12_ms": -311.95,
+    "dt13_ms": 55.69,
+    "quality_12": 0.9666,
+    "quality_13": 0.9672
+  }
+}

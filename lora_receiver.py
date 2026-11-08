@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Receiver LoRa GeoSense untuk Jetson/laptop.
 
-Membaca stream radio EBYTE lewat USB-UART, memisahkan frame biner v2 dan paket
-GPS JSON, mengirim ACK, menyusun event waveform, lalu publish ke MQTT.
+Membaca stream radio EBYTE lewat USB-UART, memisahkan frame biner v2, event
+JSON (mode uji ESP dummy), dan paket GPS JSON, mengirim ACK, menyusun event
+waveform, lalu publish ke MQTT.
 
 Alur::
 
@@ -20,6 +21,9 @@ Catatan: ESP32 dummy receiver bawaan firmware hanya mencetak log/plot ke USB,
 tidak meneruskan frame biner. Untuk menjalankan receiver di Jetson, hubungkan
 radio EBYTE ke USB-UART Jetson. ``--no-ack`` dipakai kalau ada jembatan lain
 yang sudah mengirim ACK dan meneruskan frame biner.
+
+Konfigurasi port/baud/ACK/log ada di ``lora/config.env`` (satu sumber untuk
+receiver biner dan reader teks diagnostik).
 """
 
 from __future__ import annotations
@@ -53,6 +57,13 @@ ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
 
 import lora_events
 import lora_protocol as proto
+from lora.lora_config import (
+    config_path as lora_config_path,
+    load_lora_config,
+    lora_ack_enabled,
+    lora_baud,
+    lora_port,
+)
 
 DEFAULT_TOPIC_RAW = "rawdata"
 DEFAULT_TOPIC_GPS = "gpsdata"
@@ -158,13 +169,21 @@ def main() -> None:
     if load_dotenv is not None:
         load_dotenv(ENV_PATH)
 
+    lora_cfg = load_lora_config()
+    default_port = lora_port(lora_cfg)
+    default_baud = lora_baud(lora_cfg)
+    default_ack = lora_ack_enabled(lora_cfg)
+    default_event_log = lora_cfg.get("LORA_EVENT_LOG") or "lora_events.jsonl"
+    log(f"LoRa config: {lora_config_path()}")
+
     parser = argparse.ArgumentParser(description="Receiver LoRa GeoSense -> MQTT")
-    parser.add_argument("--port", default="", help="port serial (kosong = auto)")
-    parser.add_argument("--baud", type=int, default=9600,
+    parser.add_argument("--port", default=default_port,
+                        help="port serial (kosong = auto; default dari lora/config.env)")
+    parser.add_argument("--baud", type=int, default=default_baud,
                         help="baud UART radio (default 9600; ESP32 USB 115200)")
     parser.add_argument("--seconds", type=float, default=0.0,
                         help="durasi (0 = terus menerus)")
-    parser.add_argument("--out", default="lora_events.jsonl",
+    parser.add_argument("--out", default=default_event_log,
                         help="file JSONL event lengkap")
     parser.add_argument("--no-ack", dest="ack", action="store_false",
                         help="jangan kirim ACK (kalau ESP32 yang meng-ACK)")
@@ -179,7 +198,7 @@ def main() -> None:
     parser.add_argument("--mqtt-tls", type=int, default=int(os.getenv("MQTT_TLS", "1")))
     parser.add_argument("--topic", default=os.getenv("MQTT_TOPIC_RAW", DEFAULT_TOPIC_RAW))
     parser.add_argument("--gps-topic", default=os.getenv("MQTT_TOPIC_GPS", DEFAULT_TOPIC_GPS))
-    parser.set_defaults(ack=True, mqtt_enabled=True)
+    parser.set_defaults(ack=default_ack, mqtt_enabled=True)
     args = parser.parse_args()
 
     publisher = None
@@ -224,22 +243,75 @@ def main() -> None:
                 continue
             for kind, data in demux.feed(chunk):
                 if kind == "json":
-                    gps_packets += 1
                     try:
                         payload = json.loads(data)
                     except ValueError:
-                        log(f"GPS JSON invalid: {data[:80]!r}")
+                        log(f"JSON invalid: {data[:80]!r}")
                         continue
-                    log(
-                        f"GPS node={payload.get('n')} "
-                        f"lat={payload.get('lat')} lon={payload.get('lon')} "
-                        f"sat={payload.get('sat')} utc={payload.get('utc')}"
-                    )
-                    if publisher:
-                        publisher.publish(
-                            args.gps_topic,
-                            json.dumps(payload, separators=(",", ":")),
+                    if not isinstance(payload, dict):
+                        log(f"JSON bukan object: {data[:80]!r}")
+                        continue
+
+                    msg_type = str(payload.get("type") or "").strip().lower()
+
+                    if msg_type in {"hb", "heartbeat"}:
+                        log(
+                            f"HEARTBEAT node={payload.get('n')} "
+                            f"t={payload.get('t')} (tidak dipakai ML)"
                         )
+                        continue
+
+                    if msg_type in {"event", "evt"}:
+                        samples = payload.get("samples")
+                        if not isinstance(samples, list) or len(samples) < 64:
+                            log("EVENT JSON ditolak: samples minimal 64")
+                            continue
+                        if not payload.get("n"):
+                            log("EVENT JSON ditolak: field n wajib")
+                            continue
+                        if not payload.get("event_id"):
+                            log("EVENT JSON ditolak: field event_id wajib")
+                            continue
+                        if not payload.get("utc"):
+                            log("EVENT JSON ditolak: field utc wajib")
+                            continue
+                        log(
+                            f"EVENT JSON node={payload.get('n')} "
+                            f"event={payload.get('event_id')} "
+                            f"samples={len(samples)}"
+                        )
+                        if publisher:
+                            publisher.publish(
+                                args.topic,
+                                json.dumps(payload, separators=(",", ":")),
+                            )
+                        continue
+
+                    if msg_type in {"gps", "gnss"} or (
+                        payload.get("lat") is not None
+                        and payload.get("lon") is not None
+                    ):
+                        gps_packets += 1
+                        log(
+                            f"GPS node={payload.get('n')} "
+                            f"lat={payload.get('lat')} lon={payload.get('lon')} "
+                            f"sat={payload.get('sat')} utc={payload.get('utc')}"
+                        )
+                        if publisher:
+                            publisher.publish(
+                                args.gps_topic,
+                                json.dumps(payload, separators=(",", ":")),
+                            )
+                        continue
+
+                    if msg_type in {"feature", "features"}:
+                        log(
+                            "FEATURE JSON diabaikan: ML memakai waveform "
+                            "256 sampel, bukan 7 fitur"
+                        )
+                        continue
+
+                    log(f"JSON tidak dikenal: {data[:120]!r}")
                     continue
 
                 frames += 1

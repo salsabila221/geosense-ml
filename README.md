@@ -73,9 +73,21 @@ Kontrak MQTT dan penjelasan lengkap ada di
 
 ### Receiver LoRa + MQTT
 
+> Konfigurasi radio terpusat di `lora/config.env` (port, baud, ACK, log).
+> Tanpa argumen, `lora_receiver.py` membaca konfigurasi tersebut. Contoh
+> perintah di bawah memakai override manual.
+
 Node mengirim frame **biner** v2 lewat LoRa; GPS dikirim sebagai JSON di link
 yang sama. Receiver membaca radio EBYTE lewat USB-UART, mengirim ACK, menyusun
 event, lalu publish ke MQTT. Detail protokol ada di `LORA_PROTOCOL.md`.
+
+Untuk uji ML/TDOA dengan ESP dummy yang mengirim event JSON, lihat
+`LORA_JSON_TEST.md`. Format feature JSON 7 nilai bukan input model 256 sampel.
+
+TDOA memakai posisi lokal dari GPS semua node jika tersedia. Set
+`TDOA_USE_GPS_POSITIONS=0` untuk memaksa `GEOPHONE_POS_JSON`. Titik event di
+luar `TDOA_MAX_EVENT_DISTANCE_M` (default 750 m) ditandai tidak valid agar peta
+tidak melompat jauh.
 
 ```powershell
 # Radio EBYTE langsung ke laptop (UART radio 9600)

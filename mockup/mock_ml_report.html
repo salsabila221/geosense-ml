@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GeoSense ML Mockup</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f8fafc; color: #16425b; font-family: Inter, Arial, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 32px 20px 56px; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  h2 { font-size: 18px; margin: 0 0 12px; }
+  p { line-height: 1.6; }
+  .muted { color: #5b7083; }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 22px; }
+  .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+  .badge { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .dot { width: 8px; height: 8px; border-radius: 999px; display: inline-block; }
+  .safe { color: #047857; } .safe .dot { background: #10b981; }
+  .alert { color: #b45309; } .alert .dot { background: #f59e0b; }
+  .danger { color: #b91c1c; } .danger .dot { background: #ef4444; }
+  .metric { font-size: 28px; font-weight: 800; margin: 8px 0 2px; }
+  .label { font-size: 12px; color: #5b7083; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 14px; }
+  th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #e2e8f0; }
+  th { color: #5b7083; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .location { display: grid; gap: 8px; margin-top: 14px; font-size: 13px; }
+  .location div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 7px; }
+  .location span { color: #5b7083; }
+  .location a { color: #2f6690; font-weight: 700; }
+  .map { margin-top: 24px; }
+  .map svg { width: 100%; height: auto; display: block; }
+  ul { padding-left: 18px; line-height: 1.8; }
+  .note { margin-top: 24px; padding: 14px 16px; border-radius: 12px; background: #fffbeb; color: #92400e; font-size: 13px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>GeoSense ML Mockup</h1>
+  <p class="muted">Data statis lokal. Tidak mengirim MQTT, tidak mengubah backend, dan tidak mengubah frontend.</p>
+
+  <div class="grid">
+    <section class="card">
+      <div class="badge safe"><span class="dot"></span>AMAN</div>
+      <h2 style="margin-top:10px">Getaran rendah / kondisi normal</h2>
+      <div class="metric">diem</div>
+      <div class="label">Prediksi ML node geo_1, confidence 100.0%</div>
+      <p class="muted">p2p maksimum 0.0031 mV. Tidak ada event yang dikirim.</p>
+      <table>
+        <thead><tr><th>Node</th><th>p2p</th><th>RMS</th><th>ML</th><th>Conf.</th></tr></thead>
+        <tbody><tr><td>Gedung PPBS</td><td>0.0021</td><td>0.0004</td><td>diem</td><td>100.0%</td></tr><tr><td>Parking Jembatan Cincin</td><td>0.0022</td><td>0.0004</td><td>diem</td><td>99.0%</td></tr><tr><td>Lapangan Merah</td><td>0.0031</td><td>0.0004</td><td>diem</td><td>99.0%</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="badge alert"><span class="dot"></span>SIAGA</div>
+      <h2 style="margin-top:10px">Getaran di area antara Gedung PPBS dan Lapangan Merah</h2>
+      <div class="metric">jalan</div>
+      <div class="label">Prediksi ML node geo_1, confidence 78.0%</div>
+      <p class="muted">p2p maksimum 299.6205 mV. Event disimulasikan di area antara PPBS dan Lapangan Merah.</p>
+      
+        <div class="location">
+          <div><span>Estimasi TDOA</span><strong>-6.9242937, 107.7736942</strong></div>
+          <div><span>Paling dekat</span><strong>Parking Jembatan Cincin (23.04 m)</strong></div>
+          <div><span>dt12 / dt13</span><strong>-311.95 ms / 55.69 ms</strong></div>
+          <div><span>Kualitas</span><strong>0.967 / 0.967</strong></div>
+          <div><a href="https://www.google.com/maps?q=-6.9242937,107.7736942" target="_blank" rel="noreferrer">Buka di Google Maps</a></div>
+        </div>
+        
+      <table>
+        <thead><tr><th>Node</th><th>p2p</th><th>RMS</th><th>ML</th><th>Conf.</th></tr></thead>
+        <tbody><tr><td>Gedung PPBS</td><td>296.9870</td><td>13.7584</td><td>jalan</td><td>78.0%</td></tr><tr><td>Parking Jembatan Cincin</td><td>294.3254</td><td>13.7213</td><td>jalan</td><td>84.0%</td></tr><tr><td>Lapangan Merah</td><td>299.6205</td><td>13.9373</td><td>jalan</td><td>73.0%</td></tr></tbody>
+      </table>
+    </section>
+  </div>
+
+  <section class="card map">
+    <h2>Peta lokal node dan event</h2>
+    <svg viewBox="0 0 640 360" role="img" aria-label="Peta lokal node dan event"><rect x="0" y="0" width="640" height="360" rx="16" fill="#f1f5f9"/><path d="M0 300 L640 300" stroke="#cbd5e1" stroke-width="1"/><circle cx="113.0" cy="65.0" r="11" fill="#2f6690"/><circle cx="113.0" cy="65.0" r="4" fill="#ffffff"/><text x="129.0" y="70.0" font-size="13" fill="#16425b" font-family="Inter, Arial, sans-serif">Gedung PPBS</text><circle cx="383.1" cy="184.5" r="11" fill="#2f6690"/><circle cx="383.1" cy="184.5" r="4" fill="#ffffff"/><text x="399.1" y="189.5" font-size="13" fill="#16425b" font-family="Inter, Arial, sans-serif">Parking Jembatan Cincin</text><circle cx="527.0" cy="295.0" r="11" fill="#2f6690"/><circle cx="527.0" cy="295.0" r="4" fill="#ffffff"/><text x="543.0" y="300.0" font-size="13" fill="#16425b" font-family="Inter, Arial, sans-serif">Lapangan Merah</text><circle cx="319.0" cy="170.2" r="17" fill="#dc2626" opacity="0.18"/><circle cx="319.0" cy="170.2" r="8" fill="#dc2626"/><text x="335.0" y="160.2" font-size="13" fill="#b91c1c" font-weight="700" font-family="Inter, Arial, sans-serif">Event</text></svg>
+    <p class="muted">Koordinat node:</p>
+    <ul><li><strong>Gedung PPBS</strong> (-6.9233875, 107.7731538)</li><li><strong>Parking Jembatan Cincin</strong> (-6.9244170, 107.7738624)</li><li><strong>Lapangan Merah</strong> (-6.9253700, 107.7742400)</li></ul>
+  </section>
+
+  <div class="note">
+    Ini mockup lokal. Data tidak dipublikasikan ke MQTT. Backend dan frontend tidak terpengaruh.
+    Model yang dipakai: <strong>C:\geosense-processing\models\geosense_model.pkl</strong>,
+    256 fitur, kelas [&#x27;diem&#x27;, &#x27;jalan&#x27;].
+  </div>
+</main>
+</body>
+</html>

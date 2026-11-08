@@ -444,8 +444,9 @@ class PacketDemux:
     """
     Pisahkan stream radio menjadi frame biner v2 dan baris JSON legacy.
 
-    Node mengirim event biner (``GS``) dan paket GPS JSON (``{...}\\n``) lewat
-    link yang sama. Output: list ``("frame", bytes)`` / ``("json", bytes)``.
+    Node mengirim event biner (``GS``), event JSON mode uji, dan paket GPS JSON
+    (``{...}\\n``) lewat link yang sama. Output: list ``("frame", bytes)`` /
+    ``("json", bytes)``.
     """
 
     def __init__(self, max_frame: int = MAX_FRAME_SIZE, max_json: int = MAX_JSON_LINE):
